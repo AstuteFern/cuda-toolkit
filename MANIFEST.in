@@ -1,0 +1,4 @@
+include LICENSE
+include README.md
+include cuda_kernels/autocorrelation/*.cu
+include cuda_kernels/reduction/*.cu
