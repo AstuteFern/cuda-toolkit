@@ -28,7 +28,7 @@ class BuildExt(build_ext):
 setup(
     name="cuda_kernels",
     version="0.1.0",
-    author="Sukhman Virk",
+    author="Sukhman Virk, Shiv Mehta",
     author_email="sukhmanvirk26@gmail.com",
     description="CUDA accelerated correlation and sum reduction functions",
     long_description=open("README.md").read(),
