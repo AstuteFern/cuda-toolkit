@@ -2,6 +2,7 @@ from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 import os
 import platform
+import sys
 
 class CUDAExtension(Extension):
     def __init__(self, name, sources, *args, **kwargs):
@@ -9,6 +10,16 @@ class CUDAExtension(Extension):
 
 class BuildExt(build_ext):
     def build_extensions(self):
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+        except ImportError:
+            cuda_available = False
+
+        if not cuda_available:
+            print("CUDA is not available. Building CPU-only version.")
+            return
+
         nvcc_flags = ['-O3', '--shared', '--compiler-options', '-fPIC']
         if platform.system() == 'Darwin':
             nvcc_flags.extend(['-Xcompiler', '-stdlib=libc++'])
@@ -34,8 +45,12 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/AstuteFern/cuda-toolkit",
-    packages=find_packages(),
+    packages=find_packages(include=['cuda_kernels', 'cuda_kernels.*']),
     include_package_data=True,
+    package_data={
+        'cuda_kernels.autocorrelation': ['*.cu'],
+        'cuda_kernels.reduction': ['*.cu']
+    },
     ext_modules=[
         CUDAExtension(
             "cuda_kernels.autocorrelation.autocorrelation_cuda",
@@ -56,5 +71,6 @@ setup(
     python_requires=">=3.6",
     install_requires=[
         "numpy>=1.16.0",
+        "torch>=1.7.0",
     ],
 )
