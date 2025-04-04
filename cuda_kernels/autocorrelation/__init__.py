@@ -1,5 +1,5 @@
 import numpy as np
-from .autocorrelation_cuda import run_autocorrelation
+from ._autocorrelation_cuda import run_autocorrelation
 
 def autocorrelation(data, max_lag=None):
     """

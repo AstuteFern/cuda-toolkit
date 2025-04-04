@@ -3,6 +3,18 @@ from setuptools.command.build_ext import build_ext
 import os
 import platform
 import sys
+import subprocess
+
+def get_cuda_version():
+    """Get CUDA version from nvcc."""
+    try:
+        nvcc_output = subprocess.check_output(['nvcc', '--version']).decode()
+        for line in nvcc_output.split('\n'):
+            if 'release' in line.lower():
+                return line.split('release')[1].strip().split(',')[0].strip()
+    except:
+        return None
+    return None
 
 class CUDAExtension(Extension):
     def __init__(self, name, sources, *args, **kwargs):
@@ -10,15 +22,29 @@ class CUDAExtension(Extension):
 
 class BuildExt(build_ext):
     def build_extensions(self):
+        # Check CUDA availability
+        cuda_version = get_cuda_version()
+        if not cuda_version:
+            print("ERROR: CUDA is not available. Please install CUDA toolkit and ensure nvcc is in your PATH.")
+            print("You can download CUDA from: https://developer.nvidia.com/cuda-downloads")
+            sys.exit(1)
+
+        print(f"Building with CUDA version {cuda_version}")
+        
+        # Check if PyTorch CUDA is available
         try:
             import torch
-            cuda_available = torch.cuda.is_available()
+            print(f"CUDA available: {torch.cuda.is_available()}")
+            print(f"PyTorch CUDA version: {torch.version.cuda}")
+            print(f"System CUDA version: {get_cuda_version()}")  # From your setup.py
+            if not torch.cuda.is_available():
+                print("ERROR: PyTorch CUDA is not available. Please install PyTorch with CUDA support.")
+                print("You can install it using: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
+                sys.exit(1)
         except ImportError:
-            cuda_available = False
-
-        if not cuda_available:
-            print("CUDA is not available. Building CPU-only version.")
-            return
+            print("ERROR: PyTorch is not installed. Please install PyTorch with CUDA support.")
+            print("You can install it using: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
+            sys.exit(1)
 
         nvcc_flags = ['-O3', '--shared', '--compiler-options', '-fPIC']
         if platform.system() == 'Darwin':
@@ -30,11 +56,20 @@ class BuildExt(build_ext):
                     obj = self.compiler.object_filenames([source])[0]
                     obj = os.path.splitext(obj)[0] + '.o'
                     
-                    self.spawn(['nvcc'] + nvcc_flags + ['-o', obj, source])
-                    
-                    ext.sources[i] = obj
+                    try:
+                        self.spawn(['nvcc'] + nvcc_flags + ['-o', obj, source])
+                        ext.sources[i] = obj
+                    except Exception as e:
+                        print(f"ERROR: Failed to compile CUDA source {source}: {str(e)}")
+                        sys.exit(1)
         
         build_ext.build_extensions(self)
+
+    def get_ext_filename(self, ext_name):
+        """Get the filename for the extension module."""
+        if platform.system() == 'Windows':
+            return ext_name + '.pyd'
+        return super().get_ext_filename(ext_name)
 
 setup(
     name="cuda_kernels",
@@ -53,11 +88,11 @@ setup(
     },
     ext_modules=[
         CUDAExtension(
-            "cuda_kernels.autocorrelation.autocorrelation_cuda",
+            "cuda_kernels.autocorrelation._autocorrelation_cuda",
             ["cuda_kernels/autocorrelation/autocorrelation.cu"]
         ),
         CUDAExtension(
-            "cuda_kernels.reduction.reduction_cuda",
+            "cuda_kernels.reduction._reduction_cuda",
             ["cuda_kernels/reduction/reduction.cu"]
         )
     ],

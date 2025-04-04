@@ -1,5 +1,5 @@
 import numpy as np
-from .reduction_cuda import run_reduction
+from ._reduction_cuda import run_reduction
 
 def sum_reduction(data):
     """
