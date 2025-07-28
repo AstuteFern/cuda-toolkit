@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from cuda_kernels import autocorrelation, sum_reduction
+from cuda_kernels import autocorrelation, reduction_sum
 
 def test_autocorrelation_basic():
     """Test basic autocorrelation functionality"""
@@ -33,7 +33,9 @@ def test_autocorrelation_edge_cases():
     # Test with all ones
     ones_data = np.ones(100, dtype=np.float32)
     result = autocorrelation(ones_data, max_lag=5)
-    assert np.all(result == 100)
+    # For ones data, autocorr[lag] = (100-lag) since we have (100-lag) overlapping 1*1 products
+    expected = np.array([100, 99, 98, 97, 96], dtype=np.float32)
+    assert np.allclose(result, expected)
 
 def test_autocorrelation_input_validation():
     """Test input validation for autocorrelation"""
@@ -53,7 +55,7 @@ def test_sum_reduction_basic():
     data = np.random.rand(1000).astype(np.float32)
     
     # Compute sum
-    result = sum_reduction(data)
+    result = reduction_sum(data)
     
     # Compare with numpy sum
     np_result = np.sum(data)
@@ -63,17 +65,17 @@ def test_sum_reduction_edge_cases():
     """Test sum reduction with edge cases"""
     # Test with small array
     small_data = np.array([1.0, 2.0, 3.0], dtype=np.float32)
-    result = sum_reduction(small_data)
+    result = reduction_sum(small_data)
     assert np.isclose(result, 6.0, rtol=1e-5)
     
     # Test with all zeros
     zero_data = np.zeros(100, dtype=np.float32)
-    result = sum_reduction(zero_data)
+    result = reduction_sum(zero_data)
     assert result == 0
     
     # Test with all ones
     ones_data = np.ones(100, dtype=np.float32)
-    result = sum_reduction(ones_data)
+    result = reduction_sum(ones_data)
     assert result == 100
 
 def test_sum_reduction_input_validation():
@@ -81,11 +83,11 @@ def test_sum_reduction_input_validation():
     # Test non-1D input
     with pytest.raises(ValueError):
         data_2d = np.random.rand(10, 10).astype(np.float32)
-        sum_reduction(data_2d)
+        reduction_sum(data_2d)
     
     # Test non-float32 input
     data_int = np.random.randint(0, 100, 1000)
-    result = sum_reduction(data_int)  # Should work as it converts to float32
+    result = reduction_sum(data_int)  # Should work as it converts to float32
     assert isinstance(result, float)
 
 def test_large_arrays():
@@ -99,6 +101,6 @@ def test_large_arrays():
     assert not np.any(np.isnan(acf_result))
     
     # Test sum reduction
-    sum_result = sum_reduction(large_data)
+    sum_result = reduction_sum(large_data)
     np_sum = np.sum(large_data)
     assert np.isclose(sum_result, np_sum, rtol=1e-5) 

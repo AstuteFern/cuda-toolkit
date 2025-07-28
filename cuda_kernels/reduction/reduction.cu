@@ -28,7 +28,7 @@ __global__ void gpu_reduction_sum_kernel(float* d_in, int size, float* d_out) {
 }
 
 
-void gpu_reduction_sum(float* h_data, int size, float* h_result) {
+void run_reduction(float* h_data, int size, float* h_result) {
     float *d_data = nullptr, *d_intermediate = nullptr;
 
     cudaMalloc((void**)&d_data, size * sizeof(float));

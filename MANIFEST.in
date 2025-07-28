@@ -1,4 +1,3 @@
 include LICENSE
 include README.md
-recursive-include cuda_kernels/autocorrelation *.cu
-recursive-include cuda_kernels/reduction *.cu
+recursive-include cuda_kernels *.cu

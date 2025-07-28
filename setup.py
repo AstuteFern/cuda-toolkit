@@ -25,45 +25,59 @@ class BuildExt(build_ext):
         # Check CUDA availability
         cuda_version = get_cuda_version()
         if not cuda_version:
-            print("ERROR: CUDA is not available. Please install CUDA toolkit and ensure nvcc is in your PATH.")
-            print("You can download CUDA from: https://developer.nvidia.com/cuda-downloads")
-            sys.exit(1)
+            print("WARNING: CUDA is not available. Package will be installed without CUDA acceleration.")
+            print("CPU fallback implementations will be used.")
+            print("To enable CUDA acceleration, install CUDA toolkit and reinstall this package.")
+            # Remove CUDA extensions if CUDA is not available
+            self.extensions = []
+            return
 
         print(f"Building with CUDA version {cuda_version}")
         
-        # Check if PyTorch CUDA is available
+        # Check if PyTorch CUDA is available (optional for better integration)
         try:
             import torch
-            print(f"CUDA available: {torch.cuda.is_available()}")
+            print(f"PyTorch CUDA available: {torch.cuda.is_available()}")
             print(f"PyTorch CUDA version: {torch.version.cuda}")
-            print(f"System CUDA version: {get_cuda_version()}")  # From your setup.py
-            if not torch.cuda.is_available():
-                print("ERROR: PyTorch CUDA is not available. Please install PyTorch with CUDA support.")
-                print("You can install it using: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
-                sys.exit(1)
         except ImportError:
-            print("ERROR: PyTorch is not installed. Please install PyTorch with CUDA support.")
-            print("You can install it using: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
-            sys.exit(1)
+            print("PyTorch not found - CUDA extensions will still be built")
 
-        nvcc_flags = ['-O3', '--shared', '--compiler-options', '-fPIC']
+        # Set up NVCC flags
+        nvcc_flags = ['-O3', '--shared']
+        if platform.system() == 'Windows':
+            nvcc_flags.extend(['--compiler-options', '/MD'])
+        else:
+            nvcc_flags.extend(['--compiler-options', '-fPIC'])
+            
         if platform.system() == 'Darwin':
             nvcc_flags.extend(['-Xcompiler', '-stdlib=libc++'])
         
+        # Compile CUDA sources
         for ext in self.extensions:
             for i, source in enumerate(ext.sources):
                 if source.endswith('.cu'):
-                    obj = self.compiler.object_filenames([source])[0]
-                    obj = os.path.splitext(obj)[0] + '.o'
+                    if platform.system() == 'Windows':
+                        obj = os.path.splitext(source)[0] + '.obj'
+                    else:
+                        obj = os.path.splitext(source)[0] + '.o'
                     
                     try:
-                        self.spawn(['nvcc'] + nvcc_flags + ['-o', obj, source])
+                        cmd = ['nvcc'] + nvcc_flags + ['-c', source, '-o', obj]
+                        print(f"Compiling {source}...")
+                        self.spawn(cmd)
                         ext.sources[i] = obj
                     except Exception as e:
-                        print(f"ERROR: Failed to compile CUDA source {source}: {str(e)}")
-                        sys.exit(1)
+                        print(f"WARNING: Failed to compile CUDA source {source}: {str(e)}")
+                        print("Package will be installed without CUDA acceleration.")
+                        self.extensions = []
+                        return
         
-        build_ext.build_extensions(self)
+        try:
+            build_ext.build_extensions(self)
+        except Exception as e:
+            print(f"WARNING: Failed to build CUDA extensions: {str(e)}")
+            print("Package will be installed without CUDA acceleration.")
+            self.extensions = []
 
     def get_ext_filename(self, ext_name):
         """Get the filename for the extension module."""
@@ -73,18 +87,17 @@ class BuildExt(build_ext):
 
 setup(
     name="cuda_kernels",
-    version="0.1.0",
+    version="0.1.1",
     author="Sukhman Virk, Shiv Mehta",
     author_email="sukhmanvirk26@gmail.com",
     description="CUDA accelerated correlation and sum reduction functions",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/AstuteFern/cuda-toolkit",
-    packages=find_packages(include=['cuda_kernels', 'cuda_kernels.*']),
+    packages=find_packages(),
     include_package_data=True,
     package_data={
-        'cuda_kernels.autocorrelation': ['*.cu'],
-        'cuda_kernels.reduction': ['*.cu']
+        'cuda_kernels': ['*/*.cu'],
     },
     ext_modules=[
         CUDAExtension(
@@ -106,6 +119,8 @@ setup(
     python_requires=">=3.6",
     install_requires=[
         "numpy>=1.16.0",
-        "torch>=1.7.0",
     ],
+    extras_require={
+        "cuda": ["torch>=1.7.0"],
+    },
 )
