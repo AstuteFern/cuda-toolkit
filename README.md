@@ -9,6 +9,13 @@ A Python package providing CUDA-accelerated functions for autocorrelation and su
 pip install cuda-kernels
 ```
 
+The package is distributed as a source distribution and compiled on your
+machine at install time. If the CUDA toolkit (`nvcc`) is detected, the GPU
+kernels are built and used automatically; otherwise the package installs
+CPU-only and runs the optimized NumPy fallback. GPU acceleration therefore
+requires `nvcc` (CUDA Toolkit) **and** a C/C++ host compiler to be present when
+you run `pip install`.
+
 ### From GitHub
 ```bash
 pip install git+https://github.com/AstuteFern/cuda-toolkit.git

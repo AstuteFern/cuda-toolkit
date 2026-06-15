@@ -1,5 +1,8 @@
-import numpy as np
+import ctypes
+import os
 import warnings
+
+import numpy as np
 
 def _cpu_autocorrelation(data, max_lag):
     """CPU fallback implementation of autocorrelation."""
@@ -16,13 +19,19 @@ def _cpu_autocorrelation(data, max_lag):
             result[lag] = 0.0
     return result
 
-# Try to import CUDA implementation, fall back to CPU if not available
+# Load the compiled CUDA kernel via ctypes, falling back to CPU if the shared
+# library was not built (CPU-only install) or cannot be loaded.
+_FLOAT_PTR = ctypes.POINTER(ctypes.c_float)
 try:
-    from ._autocorrelation_cuda import run_autocorrelation
+    from .._cuda_loader import load_library
+    _lib = load_library(os.path.dirname(__file__), "_autocorrelation_cuda")
+    # int run_autocorrelation(const float* data, float* result, int size, int max_lag)
+    _lib.run_autocorrelation.argtypes = [_FLOAT_PTR, _FLOAT_PTR, ctypes.c_int, ctypes.c_int]
+    _lib.run_autocorrelation.restype = ctypes.c_int
     _cuda_available = True
-except ImportError:
+except OSError:
+    _lib = None
     _cuda_available = False
-    warnings.warn("CUDA extension not available, falling back to CPU implementation", UserWarning)
 
 def autocorrelation(data, max_lag=None, force_cpu=False):
     """
@@ -62,8 +71,16 @@ def autocorrelation(data, max_lag=None, force_cpu=False):
     # Use CUDA if available and not forced to use CPU
     if _cuda_available and not force_cpu:
         try:
+            data = np.ascontiguousarray(data, dtype=np.float32)
             result = np.zeros(max_lag, dtype=np.float32)
-            run_autocorrelation(data, result, len(data), max_lag)
+            status = _lib.run_autocorrelation(
+                data.ctypes.data_as(_FLOAT_PTR),
+                result.ctypes.data_as(_FLOAT_PTR),
+                ctypes.c_int(len(data)),
+                ctypes.c_int(max_lag),
+            )
+            if status != 0:
+                raise RuntimeError(f"run_autocorrelation returned status {status}")
             return result
         except Exception as e:
             warnings.warn(f"CUDA implementation failed ({e}), falling back to CPU", UserWarning)
